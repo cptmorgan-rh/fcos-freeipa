@@ -1,0 +1,76 @@
+variant: fcos
+version: 1.1.0
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - {{ config.installer_ssh_key }}
+storage:
+  directories:
+  - path: /opt/freeipa/root
+    mode: 0644
+  - path: /opt/freeipa/data
+    mode: 0644
+  files:
+  - path: /opt/freeipa/data/ipa-server-install-options
+    contents:
+      inline: |
+        --ds-password={{ freeipa.ds_password }}
+        --admin-password={{ freeipa.admin_password }}
+        --realm={{ config.domain_name | upper }}
+        --domain={{ config.domain_name }}
+        --no-ntp
+        --unattended
+        --hostname={{ freeipa_vm.name | lower }}.{{ config.domain_name }}
+systemd:
+  units:
+    - name: freeipa-container-build.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Build FreeIPA Container
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        Type=oneshot
+        TimeoutStartSec=0
+        ExecStartPre=/usr/sbin/setsebool -P container_manage_cgroup 1
+        ExecStartPre=/usr/bin/git clone \
+                              https://github.com/freeipa/freeipa-container.git \
+                              /root/freeipa-container
+        ExecStart=/bin/podman build \
+                       -t freeipa-server \
+                       -f /root/freeipa-container/Dockerfile
+        ExecStart=/usr/bin/systemctl disable freeipa-container-build.service
+        ExecStartPost=/usr/bin/systemctl enable --now freeipa-container.service
+        [Install]
+        WantedBy=multi-user.target
+    - name: freeipa-container.service
+      enabled: false
+      contents: |
+        [Unit]
+        Description=FreeIPA Container
+        After=network-online.target
+        Wants=network-online.target
+        [Service]
+        TimeoutStartSec=0
+        ExecStartPre=-/bin/podman kill freeipa-server-container
+        ExecStartPre=-/bin/podman rm freeipa-server-container
+        ExecStart=/bin/podman run \
+                   --name freeipa-server-container -ti \
+                   --cap-add NET_ADMIN \
+                   --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+                   -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+                   -v /dev/urandom:/dev/random:ro \
+                   --tmpfs /run \
+                   --tmpfs /tmp \
+                   -h {{ freeipa_vm.name | lower }}.{{ config.domain_name }} \
+                   -v /opt/freeipa/root:/root:Z \
+                   -v /opt/freeipa/data:/data:Z \
+                   -p 80:80 -p 443:443 -p 389:389 -p 636:636 -p 88:88 -p 464:464 \
+                   -p 88:88/udp -p 464:464/udp -p 123:123/udp -p 7389:7389 \
+                   -p 9443:9443 -p 9444:9444 -p 9445:9445 \
+                   freeipa-server
+        ExecStop=/bin/podman stop freeipa-server-container
+        [Install]
+        WantedBy=multi-user.target

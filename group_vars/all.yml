@@ -1,0 +1,29 @@
+config:
+  installer_ssh_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+  domain_name: example.com
+vcenter:
+  ip: vcenter.example.com
+  datastore: ds0
+  network: 10.0.0.x-24
+  admin_username: administrator@vsphere.local
+  admin_password: Password1!
+  datacenter: LAB
+  folder_absolute_path: /LAB/vm/
+  vm_power_state: poweredon
+download:
+  fcos_stream: stable
+  govc: https://github.com/vmware/govmomi/releases/download/v0.24.0/govc_linux_amd64.gz
+  fcct: https://github.com/coreos/fcct/releases/download/v0.8.0/fcct-x86_64-unknown-linux-gnu
+freeipa_vm:
+  name: FreeIPA
+  ipaddr: 10.0.0.41
+  gateway: 10.0.0.1
+  netmask: 255.255.255.0
+  dns: 8.8.8.8
+  network_interface_name: ens192
+  num_cpus: 2
+  memory_mb: 4096
+  disk_gb: 16
+freeipa:
+  ds_password: $uP3rS3c4eT!
+  admin_password: n0t@s$uP3rS3c4eT!

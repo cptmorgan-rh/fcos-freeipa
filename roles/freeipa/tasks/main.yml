@@ -1,0 +1,59 @@
+---
+- name: Delete freeipa vm if redeploy defined
+  command: "govc vm.destroy {{ freeipa_vm.name }}" # noqa 301
+  when: redeploy is defined
+
+- name: Create Temp Build Directory for freeipa
+  tempfile:
+    state: directory
+    suffix: freeipa
+  register: freeipa_tempdir
+
+- name: "Create freeipa.fcc in {{ freeipa_tempdir.path }}"
+  template:
+    src: freeipa.fcc.j2
+    dest: "{{ freeipa_tempdir.path }}/freeipa.fcc"
+    mode: 0664
+
+- name: Create freeipa transpiled ignition file
+  shell: "{{ playbook_dir }}/bin/fcct -d {{ freeipa_tempdir.path }} --pretty --strict < {{ freeipa_tempdir.path }}/freeipa.fcc > {{ freeipa_tempdir.path }}/transpiled_config.ign" # noqa 301
+
+- name: Set freeipa_ign Fact
+  set_fact:
+    freeipa_ign: "{{ lookup('file', '{{ freeipa_tempdir.path }}/transpiled_config.ign') | b64encode }}" # noqa 207
+
+- name: Create freeipa VMs from the template
+  vmware_guest:
+    hostname: "{{ vcenter.ip }}"
+    username: "{{ vcenter.admin_username }}"
+    password: "{{ vcenter.admin_password }}"
+    datacenter: "{{ vcenter.datacenter }}"
+    validate_certs: no
+    folder: "{{ vcenter.folder_absolute_path }}"
+    name: "{{ freeipa_vm.name }}"
+    state: "{{ vcenter.vm_power_state }}"
+    template: "FCOS-{{ template_name }}"
+    disk:
+    - size_gb: "{{ freeipa_vm.disk_gb }}"
+      type: thin
+      datastore: "{{ vcenter.datastore }}"
+    hardware:
+      memory_mb: "{{ freeipa_vm.memory_mb }}"
+      num_cpus: "{{ freeipa_vm.num_cpus }}"
+      memory_reservation_lock: True
+    networks:
+    - name: "{{ vcenter.network }}"
+    wait_for_ip_address: no
+    customvalues:
+     - key: guestinfo.ignition.config.data
+       value: "{{ freeipa_ign }}"
+     - key: guestinfo.ignition.config.data.encoding
+       value: base64
+     - key: guestinfo.afterburn.initrd.network-kargs
+       value: "ip={{ freeipa_vm.ipaddr }}::{{ freeipa_vm.gateway }}:{{ freeipa_vm.netmask }}:{{ freeipa_vm.name | lower }}.{{ config.domain_name }}:ens192:off:{{ freeipa_vm.dns }}" # noqa 204
+
+- name: Remove {{ freeipa_tempdir.path }} and contents
+  file:
+    path: "{{ freeipa_tempdir.path }}"
+    state: absent
+  when: freeipa_tempdir.path is defined
