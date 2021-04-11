@@ -12,6 +12,13 @@ storage:
   - path: /opt/freeipa/data
     mode: 0644
   files:
+    - path: /etc/sysctl.d/20-silence-audit.conf
+      contents:
+        inline: |
+          # Raise console message logging level from DEBUG (7) to WARNING (4)
+          # so that audit messages don't get interspersed on the console that
+          # may frustrate a user trying to interactively log in.
+          kernel.printk=4
   - path: /opt/freeipa/data/ipa-server-install-options
     contents:
       inline: |
