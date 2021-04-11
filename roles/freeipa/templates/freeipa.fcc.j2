@@ -24,8 +24,26 @@ storage:
         --hostname={{ freeipa_vm.name | lower }}.{{ config.domain_name }}
 systemd:
   units:
-    - name: freeipa-container-build.service
+    - name: install-open-vm-tools.service
       enabled: true
+      contents: |
+        [Unit]
+        Description=Installs open-vm-tools
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=oneshot
+        TimeoutStartSec=0
+        ExecStart=/bin/bash -c "/bin/rpm-ostree install open-vm-tools"
+        ExecStartPost=/usr/bin/systemctl enable freeipa-container-build.service
+        ExecStartPost=/bin/bash -c "/usr/bin/systemctl disable install-open-vm-tools.service && reboot"
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: freeipa-container-build.service
+      enabled: false
       contents: |
         [Unit]
         Description=Build FreeIPA Container
@@ -42,9 +60,10 @@ systemd:
                        -t freeipa-server \
                        -f /root/freeipa-container/Dockerfile
         ExecStart=/usr/bin/systemctl disable freeipa-container-build.service
-        ExecStartPost=/usr/bin/systemctl enable --now freeipa-container.service
+        ExecStartPost=/usr/bin/systemctl enable --now freeipa-container.service && reboot
         [Install]
         WantedBy=multi-user.target
+
     - name: freeipa-container.service
       enabled: false
       contents: |
